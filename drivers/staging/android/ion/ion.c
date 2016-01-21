@@ -138,6 +138,7 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 
 	for_each_sg(buffer->sg_table->sgl, sg, buffer->sg_table->nents, i) {
 		sg_dma_address(sg) = sg_phys(sg);
+		g_dma_len(sg) = sg->length;
 	}
 
 	return buffer;
