@@ -249,6 +249,43 @@ void msm_dma_unmap_sg(struct device *dev, struct scatterlist *sgl, int nents,
 	msm_iommu_meta_put(meta, 1);
 }
 
+int msm_dma_unmap_all_for_dev(struct device *dev)
+{
+	struct msm_iommu_map *map, *map_next;
+	struct rb_root *root = &iommu_root;
+	struct msm_iommu_meta *meta;
+	struct rb_node *meta_node;
+	LIST_HEAD(unmap_list);
+	int ret = 0;
+
+	read_lock(&rb_tree_lock);
+	meta_node = rb_first(root);
+	while (meta_node) {
+		meta = rb_entry(meta_node, typeof(*meta), node);
+		write_lock(&meta->lock);
+		list_for_each_entry_safe(map, map_next, &meta->maps, lnode) {
+			if (map->dev != dev)
+				continue;
+
+			/* Do the actual unmapping outside of the locks */
+			if (atomic_dec_and_test(&map->refcount))
+				list_move_tail(&map->lnode, &unmap_list);
+			else
+				ret = -EINVAL;
+		}
+		write_unlock(&meta->lock);
+		meta_node = rb_next(meta_node);
+	}
+	read_unlock(&rb_tree_lock);
+
+	list_for_each_entry_safe(map, map_next, &unmap_list, lnode) {
+		dma_unmap_sg(map->dev, &map->sgl, map->nents, map->dir);
+		kfree(map);
+	}
+
+	return ret;
+}
+
 /* Only to be called by ION code when a buffer is freed */
 void msm_dma_buf_freed(void *buffer)
 {
