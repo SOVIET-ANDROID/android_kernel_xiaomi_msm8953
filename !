@@ -1,0 +1,263 @@
+[1mdiff --cc block/cfq-iosched.c[m
+[1mindex 06c625ccd2d3f,5bcfdce7beb10..0000000000000[m
+[1m--- a/block/cfq-iosched.c[m
+[1m+++ b/block/cfq-iosched.c[m
+[36m@@@ -217,6 -216,16 +217,19 @@@[m [mstruct cfqg_stats [m
+  #endif	/* CONFIG_CFQ_GROUP_IOSCHED */[m
+  };[m
+  [m
+[32m++<<<<<<< HEAD[m
+[32m++=======[m
+[32m+ /* Per-cgroup data */[m
+[32m+ struct cfq_group_data {[m
+[32m+ 	/* must be the first member */[m
+[32m+ 	struct blkcg_policy_data cpd;[m
+[32m+ [m
+[32m+ 	unsigned int weight;[m
+[32m+ 	unsigned int leaf_weight;[m
+[32m+ 	u64 group_idle;[m
+[32m+ };[m
+[32m+ [m
+[32m++>>>>>>> f8ab40652fc20... block/cfq-iosched: make group_idle per io cgroup tunable[m
+  /* This is per cgroup per device grouping structure */[m
+  struct cfq_group {[m
+  	/* must be the first member */[m
+[36m@@@ -1527,43 -1542,124 +1552,111 @@@[m [mstatic void cfq_init_cfqg_base(struct c[m
+  }[m
+  [m
+  #ifdef CONFIG_CFQ_GROUP_IOSCHED[m
+[31m -static int __cfq_set_weight(struct cgroup_subsys_state *css, u64 val,[m
+[31m -			    bool on_dfl, bool reset_dev, bool is_leaf_weight);[m
+[31m -[m
+[31m -static void cfqg_stats_exit(struct cfqg_stats *stats)[m
+[32m +static void cfqg_stats_init(struct cfqg_stats *stats)[m
+  {[m
+[31m -	blkg_rwstat_exit(&stats->merged);[m
+[31m -	blkg_rwstat_exit(&stats->service_time);[m
+[31m -	blkg_rwstat_exit(&stats->wait_time);[m
+[31m -	blkg_rwstat_exit(&stats->queued);[m
+[31m -	blkg_stat_exit(&stats->time);[m
+[31m -#ifdef CONFIG_DEBUG_BLK_CGROUP[m
+[31m -	blkg_stat_exit(&stats->unaccounted_time);[m
+[31m -	blkg_stat_exit(&stats->avg_queue_size_sum);[m
+[31m -	blkg_stat_exit(&stats->avg_queue_size_samples);[m
+[31m -	blkg_stat_exit(&stats->dequeue);[m
+[31m -	blkg_stat_exit(&stats->group_wait_time);[m
+[31m -	blkg_stat_exit(&stats->idle_time);[m
+[31m -	blkg_stat_exit(&stats->empty_time);[m
+[31m -#endif[m
+[31m -}[m
+[32m +	blkg_rwstat_init(&stats->service_bytes);[m
+[32m +	blkg_rwstat_init(&stats->serviced);[m
+[32m +	blkg_rwstat_init(&stats->merged);[m
+[32m +	blkg_rwstat_init(&stats->service_time);[m
+[32m +	blkg_rwstat_init(&stats->wait_time);[m
+[32m +	blkg_rwstat_init(&stats->queued);[m
+  [m
+[31m -static int cfqg_stats_init(struct cfqg_stats *stats, gfp_t gfp)[m
+[31m -{[m
+[31m -	if (blkg_rwstat_init(&stats->merged, gfp) ||[m
+[31m -	    blkg_rwstat_init(&stats->service_time, gfp) ||[m
+[31m -	    blkg_rwstat_init(&stats->wait_time, gfp) ||[m
+[31m -	    blkg_rwstat_init(&stats->queued, gfp) ||[m
+[31m -	    blkg_stat_init(&stats->time, gfp))[m
+[31m -		goto err;[m
+[32m +	blkg_stat_init(&stats->sectors);[m
+[32m +	blkg_stat_init(&stats->time);[m
+  [m
+  #ifdef CONFIG_DEBUG_BLK_CGROUP[m
+[31m -	if (blkg_stat_init(&stats->unaccounted_time, gfp) ||[m
+[31m -	    blkg_stat_init(&stats->avg_queue_size_sum, gfp) ||[m
+[31m -	    blkg_stat_init(&stats->avg_queue_size_samples, gfp) ||[m
+[31m -	    blkg_stat_init(&stats->dequeue, gfp) ||[m
+[31m -	    blkg_stat_init(&stats->group_wait_time, gfp) ||[m
+[31m -	    blkg_stat_init(&stats->idle_time, gfp) ||[m
+[31m -	    blkg_stat_init(&stats->empty_time, gfp))[m
+[31m -		goto err;[m
+[32m +	blkg_stat_init(&stats->unaccounted_time);[m
+[32m +	blkg_stat_init(&stats->avg_queue_size_sum);[m
+[32m +	blkg_stat_init(&stats->avg_queue_size_samples);[m
+[32m +	blkg_stat_init(&stats->dequeue);[m
+[32m +	blkg_stat_init(&stats->group_wait_time);[m
+[32m +	blkg_stat_init(&stats->idle_time);[m
+[32m +	blkg_stat_init(&stats->empty_time);[m
+  #endif[m
+[32m++<<<<<<< HEAD[m
+[32m++=======[m
+[32m+ 	return 0;[m
+[32m+ err:[m
+[32m+ 	cfqg_stats_exit(stats);[m
+[32m+ 	return -ENOMEM;[m
+[32m+ }[m
+[32m+ [m
+[32m+ static struct blkcg_policy_data *cfq_cpd_alloc(gfp_t gfp)[m
+[32m+ {[m
+[32m+ 	struct cfq_group_data *cgd;[m
+[32m+ [m
+[32m+ 	cgd = kzalloc(sizeof(*cgd), gfp);[m
+[32m+ 	if (!cgd)[m
+[32m+ 		return NULL;[m
+[32m+ 	return &cgd->cpd;[m
+[32m+ }[m
+[32m+ [m
+[32m+ static void cfq_cpd_init(struct blkcg_policy_data *cpd)[m
+[32m+ {[m
+[32m+ 	struct cfq_group_data *cgd = cpd_to_cfqgd(cpd);[m
+[32m+ 	unsigned int weight = cgroup_subsys_on_dfl(io_cgrp_subsys) ?[m
+[32m+ 			      CGROUP_WEIGHT_DFL : CFQ_WEIGHT_LEGACY_DFL;[m
+[32m+ [m
+[32m+ 	if (cpd_to_blkcg(cpd) == &blkcg_root)[m
+[32m+ 		weight *= 2;[m
+[32m+ [m
+[32m+ 	cgd->weight = weight;[m
+[32m+ 	cgd->leaf_weight = weight;[m
+[32m+ 	cgd->group_idle = cfq_group_idle;[m
+[32m+ }[m
+[32m+ [m
+[32m+ static void cfq_cpd_free(struct blkcg_policy_data *cpd)[m
+[32m+ {[m
+[32m+ 	kfree(cpd_to_cfqgd(cpd));[m
+[32m+ }[m
+[32m+ [m
+[32m+ static void cfq_cpd_bind(struct blkcg_policy_data *cpd)[m
+[32m+ {[m
+[32m+ 	struct blkcg *blkcg = cpd_to_blkcg(cpd);[m
+[32m+ 	bool on_dfl = cgroup_subsys_on_dfl(io_cgrp_subsys);[m
+[32m+ 	unsigned int weight = on_dfl ? CGROUP_WEIGHT_DFL : CFQ_WEIGHT_LEGACY_DFL;[m
+[32m+ [m
+[32m+ 	if (blkcg == &blkcg_root)[m
+[32m+ 		weight *= 2;[m
+[32m+ [m
+[32m+ 	WARN_ON_ONCE(__cfq_set_weight(&blkcg->css, weight, on_dfl, true, false));[m
+[32m+ 	WARN_ON_ONCE(__cfq_set_weight(&blkcg->css, weight, on_dfl, true, true));[m
+[32m++>>>>>>> f8ab40652fc20... block/cfq-iosched: make group_idle per io cgroup tunable[m
+  }[m
+  [m
+[31m -static struct blkg_policy_data *cfq_pd_alloc(gfp_t gfp, int node)[m
+[32m +static void cfq_pd_init(struct blkcg_gq *blkg)[m
+  {[m
+[31m -	struct cfq_group *cfqg;[m
+[31m -[m
+[31m -	cfqg = kzalloc_node(sizeof(*cfqg), gfp, node);[m
+[31m -	if (!cfqg)[m
+[31m -		return NULL;[m
+[32m +	struct cfq_group *cfqg = blkg_to_cfqg(blkg);[m
+  [m
+  	cfq_init_cfqg_base(cfqg);[m
+[32m++<<<<<<< HEAD[m
+[32m +	cfqg->weight = blkg->blkcg->cfq_weight;[m
+[32m +	cfqg->leaf_weight = blkg->blkcg->cfq_leaf_weight;[m
+[32m +	cfqg_stats_init(&cfqg->stats);[m
+[32m +	cfqg_stats_init(&cfqg->dead_stats);[m
+[32m++=======[m
+[32m+ 	if (cfqg_stats_init(&cfqg->stats, gfp)) {[m
+[32m+ 		kfree(cfqg);[m
+[32m+ 		return NULL;[m
+[32m+ 	}[m
+[32m+ [m
+[32m+ 	return &cfqg->pd;[m
+[32m+ }[m
+[32m+ [m
+[32m+ static void cfq_pd_init(struct blkg_policy_data *pd)[m
+[32m+ {[m
+[32m+ 	struct cfq_group *cfqg = pd_to_cfqg(pd);[m
+[32m+ 	struct cfq_group_data *cgd = blkcg_to_cfqgd(pd->blkg->blkcg);[m
+[32m+ [m
+[32m+ 	cfqg->weight = cgd->weight;[m
+[32m+ 	cfqg->leaf_weight = cgd->leaf_weight;[m
+[32m+ 	cfqg->group_idle = cgd->group_idle;[m
+[32m++>>>>>>> f8ab40652fc20... block/cfq-iosched: make group_idle per io cgroup tunable[m
+  }[m
+  [m
+[31m -static void cfq_pd_offline(struct blkg_policy_data *pd)[m
+[32m +static void cfq_pd_offline(struct blkcg_gq *blkg)[m
+  {[m
+[31m -	struct cfq_group *cfqg = pd_to_cfqg(pd);[m
+[32m +	struct cfq_group *cfqg = blkg_to_cfqg(blkg);[m
+  	int i;[m
+  [m
+  	for (i = 0; i < IOPRIO_BE_NR; i++) {[m
+[36m@@@ -1698,10 -1782,25 +1791,23 @@@[m [mstatic int cfq_print_leaf_weight(struc[m
+  	return 0;[m
+  }[m
+  [m
+[32m+ static int cfq_print_group_idle(struct seq_file *sf, void *v)[m
+[32m+ {[m
+[32m+ 	struct blkcg *blkcg = css_to_blkcg(seq_css(sf));[m
+[32m+ 	struct cfq_group_data *cgd = blkcg_to_cfqgd(blkcg);[m
+[32m+ 	u64 val = 0;[m
+[32m+ [m
+[32m+ 	if (cgd)[m
+[32m+ 		val = cgd->group_idle;[m
+[32m+ [m
+[32m+ 	seq_printf(sf, "%llu\n", div_u64(val, NSEC_PER_USEC));[m
+[32m+ 	return 0;[m
+[32m+ }[m
+[32m+ [m
+  static ssize_t __cfqg_set_weight_device(struct kernfs_open_file *of,[m
+  					char *buf, size_t nbytes, loff_t off,[m
+[31m -					bool on_dfl, bool is_leaf_weight)[m
+[32m +					bool is_leaf_weight)[m
+  {[m
+[31m -	unsigned int min = on_dfl ? CGROUP_WEIGHT_MIN : CFQ_WEIGHT_LEGACY_MIN;[m
+[31m -	unsigned int max = on_dfl ? CGROUP_WEIGHT_MAX : CFQ_WEIGHT_LEGACY_MAX;[m
+  	struct blkcg *blkcg = css_to_blkcg(of_css(of));[m
+  	struct blkg_conf_ctx ctx;[m
+  	struct cfq_group *cfqg;[m
+[36m@@@ -1784,9 -1913,40 +1890,40 @@@[m [mstatic int cfq_set_weight(struct cgroup[m
+  static int cfq_set_leaf_weight(struct cgroup_subsys_state *css,[m
+  			       struct cftype *cft, u64 val)[m
+  {[m
+[31m -	return __cfq_set_weight(css, val, false, false, true);[m
+[32m +	return __cfq_set_weight(css, cft, val, true);[m
+  }[m
+  [m
+[32m+ static int cfq_set_group_idle(struct cgroup_subsys_state *css,[m
+[32m+ 			       struct cftype *cft, u64 val)[m
+[32m+ {[m
+[32m+ 	struct blkcg *blkcg = css_to_blkcg(css);[m
+[32m+ 	struct cfq_group_data *cfqgd;[m
+[32m+ 	struct blkcg_gq *blkg;[m
+[32m+ 	int ret = 0;[m
+[32m+ [m
+[32m+ 	spin_lock_irq(&blkcg->lock);[m
+[32m+ 	cfqgd = blkcg_to_cfqgd(blkcg);[m
+[32m+ 	if (!cfqgd) {[m
+[32m+ 		ret = -EINVAL;[m
+[32m+ 		goto out;[m
+[32m+ 	}[m
+[32m+ [m
+[32m+ 	cfqgd->group_idle = val * NSEC_PER_USEC;[m
+[32m+ [m
+[32m+ 	hlist_for_each_entry(blkg, &blkcg->blkg_list, blkcg_node) {[m
+[32m+ 		struct cfq_group *cfqg = blkg_to_cfqg(blkg);[m
+[32m+ [m
+[32m+ 		if (!cfqg)[m
+[32m+ 			continue;[m
+[32m+ [m
+[32m+ 		cfqg->group_idle = cfqgd->group_idle;[m
+[32m+ 	}[m
+[32m+ [m
+[32m+ out:[m
+[32m+ 	spin_unlock_irq(&blkcg->lock);[m
+[32m+ 	return ret;[m
+[32m+ }[m
+[32m+ [m
+  static int cfqg_print_stat(struct seq_file *sf, void *v)[m
+  {[m
+  	blkcg_print_blkgs(sf, css_to_blkcg(seq_css(sf)), blkg_prfill_stat,[m
+[36m@@@ -2741,11 -2986,11 +2883,11 @@@[m [mstatic void cfq_arm_slice_timer(struct [m
+  [m
+  	/*[m
+  	 * SSD device without seek penalty, disable idling. But only do so[m
+[31m -	 * for devices that support queuing, otherwise we still have a problem[m
+[31m -	 * with sync vs async workloads.[m
+[32m +	 * for devices that support queuing (and when group idle is 0),[m
+[32m +	 * otherwise we still have a problem with sync vs async workloads.[m
+  	 */[m
+  	if (blk_queue_nonrot(cfqd->queue) && cfqd->hw_tag &&[m
+[31m- 		!cfqd->cfq_group_idle)[m
+[32m+ 		!get_group_idle(cfqd))[m
+  		return;[m
+  [m
+  	WARN_ON(!RB_EMPTY_ROOT(&cfqq->sort_list));[m
