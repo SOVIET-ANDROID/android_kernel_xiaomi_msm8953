@@ -193,11 +193,9 @@ static int __msm_dma_map_sg(struct device *dev, struct scatterlist *sg,
 		sg->dma_length = map->sgl.dma_length;
 
 		/*
-		 * Ensure all outstanding changes for coherent buffers are
-		 * applied to the cache before any DMA occurs.
+		 * Need to do cache operations here based on "dir" in the
+		 * future if we go with coherent mappings.
 		 */
-		if (is_device_dma_coherent(dev))
-			dmb(ish);
 	} else {
 		map = kmalloc(sizeof(*map), GFP_KERNEL);
 		if (!map) {
